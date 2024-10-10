@@ -1,40 +1,74 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { addEvent } from "@/redux/eventSlice";
+import { addEvent, editEvent } from "@/redux/eventSlice";
 import { useRouter } from "next/router";
 import { uploadImageToStorage } from "@/redux/eventSlice";
-import { ClipLoader } from "react-spinners";
+import TitleInput from "../Inputs/TitleInput/page";
+import DateTimeInput from "../Inputs/DateTimeInput/page";
+import LocationInput from "../Inputs/LocationInput/page";
+import DescriptionInput from "../Inputs/DescriptionInput/page";
+import PriceInput from "../Inputs/PriceInput/page";
+import ImageUpload from "../Inputs/ImageUpload/page";
+import SubmitButton from "../Inputs/SubmitButton/page";
+import CategoryInput from "../Inputs/CategoryInput/page";
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/utiles/api";
 
 const AddEventPage = () => {
   const dispatch = useDispatch();
   const router = useRouter();
-
   const { loading, error } = useSelector((state) => state.events);
+  const { id } = router.query;
 
   const [title, setTitle] = useState("");
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [location, setLocation] = useState("");
+  const [category, setCategory] = useState("");
   const [description, setDescription] = useState("");
   const [price, setPrice] = useState("");
   const [image, setImage] = useState("");
   const [imageFile, setImageFile] = useState(null);
-  const [useUrl, setUseUrl] = useState(true);
+  const [useUrl, setUseUrl] = useState(false);
   const [loadingImage, setLoadingImage] = useState(false);
+
+  useEffect(() => {
+    if (id) {
+      const fetchEventData = async () => {
+        const docRef = doc(db, "events", id);
+        const docSnap = await getDoc(docRef);
+        if (docSnap.exists()) {
+          const eventData = docSnap.data();
+          setTitle(eventData.title);
+          setDate(eventData.date);
+          setTime(eventData.time);
+          setLocation(eventData.location);
+          setCategory(eventData.category);
+          setDescription(eventData.description);
+          setPrice(eventData.price);
+          setImage(eventData.image);
+        } else {
+          console.error("No such document!");
+        }
+      };
+      fetchEventData();
+    }
+  }, [id]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     let imageUrl = image;
+
     if (!useUrl && imageFile) {
       try {
         setLoadingImage(true);
         imageUrl = await uploadImageToStorage(imageFile);
-        setLoadingImage(false);
       } catch (uploadError) {
         console.error("Image upload failed:", uploadError);
         setLoadingImage(false);
         return;
+      } finally {
+        setLoadingImage(false);
       }
     }
 
@@ -43,13 +77,22 @@ const AddEventPage = () => {
       date,
       time,
       location,
+      category,
       description,
       price: price || "Free",
       image: imageUrl,
     };
-    const result = await dispatch(addEvent(newEvent));
+
+    console.log("Submitting Event:", newEvent);
+
+    const result = id
+      ? await dispatch(editEvent({ id, eventData: newEvent }))
+      : await dispatch(addEvent(newEvent));
+
+    console.log("Dispatch Result:", result);
+
     if (result.error) {
-      console.error("Failed to add event:", result.error.message);
+      console.error("Failed to save event:", result.error.message);
     } else {
       router.push("/events");
     }
@@ -59,190 +102,48 @@ const AddEventPage = () => {
     const file = e.target.files[0];
     if (file) {
       setImageFile(file);
+      setImage(URL.createObjectURL(file));
     }
   };
 
+  const categoriesList = ["Music", "Sports", "Conference", "Workshop"];
+
   return (
     <div className="container mx-auto px-4 py-8">
-      <h2 className="text-3xl font-bold mb-6">Add New Event</h2>
-      {loading && <p>Submitting event...</p>}
-      {error && <p className="text-red-500">Error: {error}</p>}
-
+      <h1 className="text-3xl font-semibold mb-6 text-gray-100">
+        {id ? "Edit Event" : "Add Event"}
+      </h1>
       <form
         onSubmit={handleSubmit}
-        className="max-w-lg mx-auto bg-white text-gray-800 p-8 shadow-md rounded-lg"
+        className="max-w-lg mx-auto bg-gray-100 border border-gray-200 text-gray-800 p-8 shadow-md rounded-lg"
       >
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 font-semibold mb-2"
-            htmlFor="title"
-          >
-            Event Title
-          </label>
-          <input
-            id="title"
-            type="text"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            required
-          />
-        </div>
-
-        <div className="mb-4 flex flex-row gap-2">
-          <div className="w-1/2">
-            <label
-              className="block text-gray-700 font-semibold mb-2"
-              htmlFor="date"
-            >
-              Event Date/Time
-            </label>
-            <input
-              id="date"
-              type="date"
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              required
-            />
-          </div>
-          <div className="w-1/2">
-            <label
-              className="block text-gray-700 font-semibold my-8"
-              htmlFor="time"
-            ></label>
-            <input
-              id="time"
-              type="time"
-              value={time}
-              onChange={(e) => setTime(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            />
-          </div>
-        </div>
-
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 font-semibold mb-2"
-            htmlFor="location"
-          >
-            Location
-          </label>
-          <input
-            id="location"
-            type="text"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            required
-          />
-        </div>
-
-        {/* New Description Input */}
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 font-semibold mb-2"
-            htmlFor="description"
-          >
-            Event Description
-          </label>
-          <textarea
-            id="description"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            rows="4"
-            placeholder="Enter event details"
-            required
-          />
-        </div>
-
-        {/* New Price Input */}
-        <div className="mb-4">
-          <label
-            className="block text-gray-700 font-semibold mb-2"
-            htmlFor="price"
-          >
-            Event Price (Optional)
-          </label>
-          <input
-            id="price"
-            type="text"
-            value={price}
-            onChange={(e) => setPrice(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-md"
-            placeholder="e.g. 50 or Free"
-          />
-        </div>
-
-        {/* Toggle between image URL and file upload */}
-        <div className="mb-6">
-          <label className="block text-gray-700 font-semibold mb-2">
-            Add Event Image
-          </label>
-          <div className="flex items-center mb-4">
-            <button
-              type="button"
-              onClick={() => setUseUrl(true)}
-              className={`px-4 py-2 mr-2 rounded ${
-                useUrl ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              Use URL
-            </button>
-            <button
-              type="button"
-              onClick={() => setUseUrl(false)}
-              className={`px-4 py-2 rounded ${
-                !useUrl ? "bg-blue-600 text-white" : "bg-gray-200 text-gray-600"
-              }`}
-            >
-              Upload File
-            </button>
-          </div>
-
-          {/* Conditionally render URL or file input */}
-          {useUrl ? (
-            <input
-              id="image"
-              type="url"
-              value={image}
-              onChange={(e) => setImage(e.target.value)}
-              placeholder="Image URL"
-              className="w-full px-3 py-2 border border-gray-300 rounded-md"
-              required={useUrl}
-            />
-          ) : (
-            <div>
-              <input
-                id="imageFile"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                required={!useUrl}
-              />
-              {/* Show loading spinner during image upload */}
-              {loadingImage && (
-                <div className="flex justify-center mt-2">
-                  <ClipLoader
-                    color="#4A90E2"
-                    loading={loadingImage}
-                    size={50}
-                  />
-                </div>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button
-          type="submit"
-          className="w-full bg-blue-600 text-white font-semibold py-2 rounded-md hover:bg-blue-700 transition duration-300"
-          disabled={loading || loadingImage} // Disable submit if image is uploading
-        >
-          {loading ? "Adding Event..." : "Add Event"}
-        </button>
+        <TitleInput title={title} setTitle={setTitle} />
+        <DateTimeInput
+          date={date}
+          setDate={setDate}
+          time={time}
+          setTime={setTime}
+        />
+        <LocationInput location={location} setLocation={setLocation} />
+        <CategoryInput
+          category={category}
+          setCategory={setCategory}
+          categories={categoriesList}
+        />
+        <DescriptionInput
+          description={description}
+          setDescription={setDescription}
+        />
+        <PriceInput price={price} setPrice={setPrice} />
+        <ImageUpload
+          useUrl={useUrl}
+          setUseUrl={setUseUrl}
+          image={image}
+          setImage={setImage}
+          handleFileChange={handleFileChange}
+          loadingImage={loadingImage}
+        />
+        <SubmitButton loading={loading} loadingImage={loadingImage} />
       </form>
     </div>
   );
